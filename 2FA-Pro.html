@@ -1,0 +1,2068 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2FA Pro - 高级验证码管理器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/otpauth/9.3.1/otpauth.umd.min.js"></script>
+    <style>
+        /* ========== 暗色主题（默认） ========== */
+        :root {
+            --neon-cyan: #00f5ff;
+            --neon-purple: #b347ea;
+            --neon-pink: #ff2d95;
+            --neon-green: #00ff9f;
+            --neon-orange: #ff9500;
+            --neon-blue: #0088ff;
+
+            /* 暗色主题变量 */
+            --bg-primary: #05050a;
+            --bg-secondary: #0a0a15;
+            --bg-card: rgba(12, 12, 25, 0.9);
+            --bg-input: rgba(255, 255, 255, 0.03);
+            --bg-input-focus: rgba(0, 245, 255, 0.03);
+            --border-color: rgba(255, 255, 255, 0.06);
+            --border-light: rgba(255, 255, 255, 0.1);
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --text-muted: #555;
+            --text-dim: #444;
+            --grid-color: rgba(0, 245, 255, 0.04);
+            --gradient-1: rgba(0, 245, 255, 0.08);
+            --gradient-2: rgba(179, 71, 234, 0.08);
+            --gradient-3: rgba(255, 45, 149, 0.05);
+            --shadow-glow: rgba(0, 245, 255, 0.15);
+        }
+
+        /* ========== 亮色主题 ========== */
+        [data-theme="light"] {
+            --neon-cyan: #0099cc;
+            --neon-purple: #8b2fc9;
+            --neon-pink: #d91a6c;
+            --neon-green: #00b368;
+            --neon-orange: #cc7700;
+            --neon-blue: #0066cc;
+
+            --bg-primary: #f5f7fa;
+            --bg-secondary: #e8ecf1;
+            --bg-card: rgba(255, 255, 255, 0.95);
+            --bg-input: rgba(0, 0, 0, 0.04);
+            --bg-input-focus: rgba(0, 153, 204, 0.08);
+            --border-color: rgba(0, 0, 0, 0.08);
+            --border-light: rgba(0, 0, 0, 0.12);
+            --text-primary: #1a1a2e;
+            --text-secondary: #555;
+            --text-muted: #888;
+            --text-dim: #aaa;
+            --grid-color: rgba(0, 153, 204, 0.08);
+            --gradient-1: rgba(0, 153, 204, 0.12);
+            --gradient-2: rgba(139, 47, 201, 0.12);
+            --gradient-3: rgba(217, 26, 108, 0.08);
+            --shadow-glow: rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            background: var(--bg-primary);
+            font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
+            color: var(--text-primary);
+            overflow-x: hidden;
+            position: relative;
+            transition: background 0.4s ease, color 0.4s ease;
+        }
+
+        /* ========== 动态背景层 ========== */
+        .bg-gradient-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 20%, var(--gradient-1) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 60% at 80% 80%, var(--gradient-2) 0%, transparent 50%),
+                radial-gradient(ellipse 50% 40% at 50% 50%, var(--gradient-3) 0%, transparent 50%);
+            animation: gradientPulse 15s ease-in-out infinite;
+            transition: background 0.4s ease;
+        }
+
+        @keyframes gradientPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+
+        /* 动态网格 */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background-image:
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 30s linear infinite;
+            pointer-events: none;
+            transition: background-image 0.4s ease;
+        }
+
+        @keyframes gridMove {
+            0% { background-position: 0 0, 0 0; }
+            100% { background-position: 50px 50px, -50px 50px; }
+        }
+
+        /* 粒子光点 */
+        .particles {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            animation: particleFloat linear infinite;
+            opacity: 0;
+        }
+
+        @keyframes particleFloat {
+            0% {
+                transform: translateY(0) translateX(0) scale(1);
+                opacity: 0;
+            }
+            10% { opacity: 1; }
+            90% { opacity: 0.6; }
+            100% {
+                transform: translateY(-100vh) translateX(50px) scale(0.2);
+                opacity: 0;
+            }
+        }
+
+        /* ========== 顶部导航栏 ========== */
+        .top-nav {
+            position: relative;
+            z-index: 10;
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            transition: background 0.4s ease, border-color 0.4s ease;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+            animation: logoGlow 3s ease-in-out infinite;
+        }
+
+        @keyframes logoGlow {
+            0%, 100% { box-shadow: 0 0 20px rgba(0, 245, 255, 0.3); }
+            50% { box-shadow: 0 0 30px rgba(179, 71, 234, 0.5); }
+        }
+
+        .logo-text {
+            font-size: 1.3rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple), var(--neon-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .nav-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.03);
+            color: #aaa;
+            font-size: 0.75rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-btn.active {
+            background: rgba(0, 245, 255, 0.1);
+            border-color: var(--neon-cyan);
+            color: var(--neon-cyan);
+        }
+
+        /* 主题切换按钮 */
+        .theme-toggle {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            border: 1px solid var(--border-light);
+            background: var(--bg-input);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            font-size: 18px;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-input-focus);
+            color: var(--neon-cyan);
+            border-color: var(--neon-cyan);
+            transform: rotate(15deg);
+        }
+
+        [data-theme="light"] .theme-toggle .icon-sun {
+            display: none;
+        }
+
+        [data-theme="light"] .theme-toggle .icon-moon {
+            display: block;
+        }
+
+        .theme-toggle .icon-moon {
+            display: none;
+        }
+
+        .theme-toggle .icon-sun {
+            display: block;
+        }
+
+        /* 搜索框 */
+        .search-box {
+            position: relative;
+            flex: 1;
+            max-width: 300px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 16px 10px 40px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-light);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.8rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 15px rgba(0, 245, 255, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #555;
+        }
+
+        /* ========== 主容器 ========== */
+        .main-container {
+            position: relative;
+            z-index: 1;
+            padding: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* 统计卡片 */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+
+        .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+
+        .stat-icon.cyan {
+            background: rgba(0, 245, 255, 0.1);
+            border: 1px solid rgba(0, 245, 255, 0.2);
+        }
+
+        .stat-icon.purple {
+            background: rgba(179, 71, 234, 0.1);
+            border: 1px solid rgba(179, 71, 234, 0.2);
+        }
+
+        .stat-icon.green {
+            background: rgba(0, 255, 159, 0.1);
+            border: 1px solid rgba(0, 255, 159, 0.2);
+        }
+
+        .stat-icon.pink {
+            background: rgba(255, 45, 149, 0.1);
+            border: 1px solid rgba(255, 45, 149, 0.2);
+        }
+
+        .stat-content {
+            flex: 1;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: 0.02em;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        /* ========== 主内容区 ========== */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 24px;
+            align-items: start;
+        }
+
+        @media (max-width: 1100px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 玻璃卡片 */
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            backdrop-filter: blur(20px);
+            overflow: hidden;
+            position: relative;
+            transition: background 0.4s ease, border-color 0.4s ease;
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 245, 255, 0.3), rgba(179, 71, 234, 0.3), transparent);
+        }
+
+        .card-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--card-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .card-title-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .card-title-text {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: 0.04em;
+        }
+
+        .card-body {
+            padding: 24px;
+        }
+
+        /* ========== 生成器面板 ========== */
+        .generator-section {
+            margin-bottom: 24px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-label {
+            display: block;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 8px;
+        }
+
+        .input-glow {
+            width: 100%;
+            padding: 14px 18px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-light);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.9rem;
+            text-align: center;
+            letter-spacing: 0.15em;
+            outline: none;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .input-glow:focus {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 25px var(--shadow-glow);
+            background: var(--bg-input-focus);
+        }
+
+        .input-glow::placeholder {
+            color: var(--text-dim);
+            letter-spacing: 0.05em;
+            text-transform: none;
+        }
+
+        /* 高级选项 */
+        .advanced-options {
+            background: var(--bg-input);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 20px;
+            transition: background 0.4s ease;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .option-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .option-label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .option-select {
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.75rem;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .option-select:focus {
+            border-color: var(--neon-purple);
+        }
+
+        /* 验证码展示区 */
+        .code-display-area {
+            background: linear-gradient(135deg, var(--gradient-1), var(--gradient-2));
+            border: 1px solid var(--neon-cyan);
+            border-radius: 18px;
+            padding: 32px 24px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: background 0.4s ease, border-color 0.4s ease;
+        }
+
+        .code-display-area::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at center, var(--gradient-1) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .code-display-area::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                45deg,
+                transparent 30%,
+                rgba(255, 255, 255, 0.03) 50%,
+                transparent 70%
+            );
+            animation: shimmer 3s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) translateY(-100%); }
+            100% { transform: translateX(100%) translateY(100%); }
+        }
+
+        .code-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.25em;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .code-digits {
+            font-size: 4rem;
+            font-weight: 900;
+            letter-spacing: 0.2em;
+            color: var(--neon-cyan);
+            text-shadow:
+                0 0 20px rgba(0, 245, 255, 0.6),
+                0 0 40px rgba(0, 245, 255, 0.3),
+                0 0 80px rgba(0, 245, 255, 0.15);
+            position: relative;
+            z-index: 1;
+            transition: all 0.3s ease;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .code-digits.expiring {
+            color: var(--neon-pink);
+            text-shadow:
+                0 0 20px rgba(255, 45, 149, 0.7),
+                0 0 40px rgba(255, 45, 149, 0.4),
+                0 0 80px rgba(255, 45, 149, 0.2);
+            animation: codePulse 0.6s ease-in-out infinite;
+        }
+
+        @keyframes codePulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.02); opacity: 0.8; }
+        }
+
+        .code-digits.updated {
+            animation: codePop 0.3s ease-out;
+        }
+
+        @keyframes codePop {
+            0% { transform: scale(1.1); opacity: 0.6; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* 进度环 */
+        .progress-ring-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+            position: relative;
+            z-index: 1;
+        }
+
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+
+        .progress-ring-bg {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.05);
+            stroke-width: 4;
+        }
+
+        .progress-ring-fill {
+            fill: none;
+            stroke: var(--neon-cyan);
+            stroke-width: 4;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
+            filter: drop-shadow(0 0 6px rgba(0, 245, 255, 0.5));
+        }
+
+        .progress-ring-fill.warning {
+            stroke: var(--neon-pink);
+            filter: drop-shadow(0 0 6px rgba(255, 45, 149, 0.6));
+        }
+
+        .countdown-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--neon-cyan);
+        }
+
+        .countdown-text.warning {
+            color: var(--neon-pink);
+        }
+
+        /* 按钮组 */
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .btn-glow {
+            flex: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            border: 1px solid rgba(0, 245, 255, 0.25);
+            background: rgba(0, 245, 255, 0.08);
+            color: var(--neon-cyan);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-glow::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.5s;
+        }
+
+        .btn-glow:hover::before {
+            transform: translateX(100%);
+        }
+
+        .btn-glow:hover {
+            background: rgba(0, 245, 255, 0.15);
+            border-color: rgba(0, 245, 255, 0.5);
+            box-shadow: 0 0 25px rgba(0, 245, 255, 0.25);
+            transform: translateY(-2px);
+        }
+
+        .btn-glow:active {
+            transform: scale(0.98);
+        }
+
+        .btn-purple {
+            border-color: rgba(179, 71, 234, 0.25);
+            background: rgba(179, 71, 234, 0.08);
+            color: var(--neon-purple);
+        }
+
+        .btn-purple:hover {
+            background: rgba(179, 71, 234, 0.15);
+            border-color: rgba(179, 71, 234, 0.5);
+            box-shadow: 0 0 25px rgba(179, 71, 234, 0.25);
+        }
+
+        .btn-green {
+            border-color: rgba(0, 255, 159, 0.25);
+            background: rgba(0, 255, 159, 0.08);
+            color: var(--neon-green);
+        }
+
+        .btn-green:hover {
+            background: rgba(0, 255, 159, 0.15);
+            border-color: rgba(0, 255, 159, 0.5);
+            box-shadow: 0 0 25px rgba(0, 255, 159, 0.25);
+        }
+
+        .btn-orange {
+            border-color: rgba(255, 149, 0, 0.25);
+            background: rgba(255, 149, 0, 0.08);
+            color: var(--neon-orange);
+        }
+
+        .btn-orange:hover {
+            background: rgba(255, 149, 0, 0.15);
+            border-color: rgba(255, 149, 0, 0.5);
+            box-shadow: 0 0 25px rgba(255, 149, 0, 0.25);
+        }
+
+        /* ========== 账户列表 ========== */
+        .add-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .add-form .input-glow {
+            text-align: left;
+            font-size: 0.78rem;
+            padding: 12px 14px;
+            letter-spacing: 0.03em;
+        }
+
+        .add-form .input-glow.name-input {
+            flex: 0 0 30%;
+            text-transform: none;
+        }
+
+        .add-form .input-glow.secret-input {
+            flex: 1;
+        }
+
+        /* 分类标签 */
+        .category-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .category-tab {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: transparent;
+            color: #666;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .category-tab:hover {
+            color: #aaa;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .category-tab.active {
+            background: rgba(0, 245, 255, 0.12);
+            border-color: rgba(0, 245, 255, 0.3);
+            color: var(--neon-cyan);
+        }
+
+        /* 账户列表 */
+        .accounts-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 6px;
+        }
+
+        .accounts-list::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .accounts-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .accounts-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .account-item {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            transition: all 0.3s ease;
+            gap: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .account-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 3px;
+            height: 100%;
+            background: var(--neon-cyan);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .account-item:hover {
+            border-color: var(--border-light);
+            background: var(--bg-input-focus);
+            transform: translateX(4px);
+        }
+
+        .account-item:hover::before {
+            opacity: 1;
+        }
+
+        .account-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .account-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .account-name {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .account-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        .account-secret {
+            font-size: 0.62rem;
+            color: #444;
+            letter-spacing: 0.05em;
+        }
+
+        .account-category {
+            font-size: 0.58rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #555;
+        }
+
+        .account-code {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 0.15em;
+            color: var(--neon-purple);
+            text-shadow: 0 0 15px rgba(179, 71, 234, 0.4);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            min-width: 100px;
+            text-align: right;
+        }
+
+        .account-progress {
+            width: 3px;
+            height: 36px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 2px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .account-progress-bar {
+            width: 100%;
+            background: var(--neon-purple);
+            transition: height 1s linear;
+            border-radius: 2px;
+        }
+
+        .account-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .btn-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: transparent;
+            color: #555;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .btn-icon:hover {
+            color: var(--neon-cyan);
+            border-color: var(--neon-cyan);
+            background: rgba(0, 245, 255, 0.1);
+        }
+
+        .btn-icon.delete:hover {
+            color: var(--neon-pink);
+            border-color: var(--neon-pink);
+            background: rgba(255, 45, 149, 0.1);
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-dim);
+        }
+
+        .empty-state svg {
+            margin: 0 auto 16px;
+            opacity: 0.2;
+        }
+
+        .empty-state p {
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+        }
+
+        /* ========== Toast ========== */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: var(--bg-card);
+            border: 1px solid var(--neon-cyan);
+            color: var(--neon-cyan);
+            padding: 14px 28px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+            opacity: 0;
+            transition: all 0.4s ease;
+            pointer-events: none;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 10px 40px var(--shadow-glow);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* ========== 模态框 ========== */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 200;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow: auto;
+            animation: modalIn 0.3s ease;
+            transition: background 0.4s ease, border-color 0.4s ease;
+        }
+
+        @keyframes modalIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: #666;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .modal-close:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        /* ========== 导入导出区 ========== */
+        .export-area {
+            background: var(--bg-input);
+            border-radius: 12px;
+            padding: 16px;
+            font-family: monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            word-break: break-all;
+            max-height: 200px;
+            overflow: auto;
+            margin-bottom: 16px;
+            transition: background 0.4s ease;
+        }
+
+        /* ========== 响应式 ========== */
+        @media (max-width: 768px) {
+            .top-nav {
+                padding: 12px 16px;
+            }
+
+            .logo-text {
+                font-size: 1.1rem;
+            }
+
+            .search-box {
+                order: 3;
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .main-container {
+                padding: 16px;
+            }
+
+            .stats-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .stat-card {
+                padding: 14px;
+            }
+
+            .stat-value {
+                font-size: 1.4rem;
+            }
+
+            .code-digits {
+                font-size: 2.8rem;
+            }
+
+            .options-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .add-form {
+                flex-wrap: wrap;
+            }
+
+            .add-form .input-glow.name-input {
+                flex: 1 1 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 背景效果 -->
+    <div class="bg-gradient-layer"></div>
+    <div class="bg-grid"></div>
+    <div class="particles" id="particles"></div>
+
+    <!-- 顶部导航 -->
+    <nav class="top-nav">
+        <div class="logo">
+            <div class="logo-icon">&#128274;</div>
+            <span class="logo-text">2FA Pro</span>
+        </div>
+
+        <div class="search-box">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input type="text" class="search-input" id="searchInput" placeholder="搜索账户...">
+        </div>
+
+        <div class="nav-actions">
+            <button class="theme-toggle" onclick="toggleTheme()" title="切换主题">
+                <span class="icon-sun">&#9728;</span>
+                <span class="icon-moon">&#9790;</span>
+            </button>
+            <button class="nav-btn" onclick="exportAccounts()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                </svg>
+                导出
+            </button>
+            <button class="nav-btn" onclick="showImportModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                </svg>
+                导入
+            </button>
+            <button class="nav-btn" onclick="copyAllCodes()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                </svg>
+                复制全部
+            </button>
+        </div>
+    </nav>
+
+    <!-- 主容器 -->
+    <div class="main-container">
+        <!-- 统计卡片 -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-icon cyan">&#128100;</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="stat-total">0</div>
+                    <div class="stat-label">账户总数</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon purple">&#128274;</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="stat-copied">0</div>
+                    <div class="stat-label">今日复制</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green">&#9203;</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="stat-time">--:--</div>
+                    <div class="stat-label">当前时间</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon pink">&#128260;</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="stat-sync">&#10003;</div>
+                    <div class="stat-label">时间同步</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="content-grid">
+            <!-- 左侧：生成器 -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="card-title-icon icon-shield" style="background: rgba(0, 245, 255, 0.1); border: 1px solid rgba(0, 245, 255, 0.2);">&#128737;</div>
+                        <span class="card-title-text">验证码生成器</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="generator-section">
+                        <div class="input-group">
+                            <label class="input-label">Secret Key</label>
+                            <input type="text" id="secret" placeholder="输入 Base32 密钥..." class="input-glow" autocomplete="off">
+                        </div>
+
+                        <div class="advanced-options">
+                            <div style="font-size: 0.68rem; color: #666; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px;">高级选项</div>
+                            <div class="options-grid">
+                                <div class="option-item">
+                                    <label class="option-label">验证码位数</label>
+                                    <select class="option-select" id="digits-select">
+                                        <option value="6">6 位</option>
+                                        <option value="8">8 位</option>
+                                    </select>
+                                </div>
+                                <div class="option-item">
+                                    <label class="option-label">周期时间</label>
+                                    <select class="option-select" id="period-select">
+                                        <option value="30">30 秒</option>
+                                        <option value="60">60 秒</option>
+                                    </select>
+                                </div>
+                                <div class="option-item">
+                                    <label class="option-label">算法</label>
+                                    <select class="option-select" id="algorithm-select">
+                                        <option value="SHA1">SHA-1</option>
+                                        <option value="SHA256">SHA-256</option>
+                                        <option value="SHA512">SHA-512</option>
+                                    </select>
+                                </div>
+                                <div class="option-item">
+                                    <label class="option-label">分类</label>
+                                    <select class="option-select" id="category-select">
+                                        <option value="social">社交</option>
+                                        <option value="work">工作</option>
+                                        <option value="finance">金融</option>
+                                        <option value="game">游戏</option>
+                                        <option value="other">其他</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="code-display-area">
+                            <div class="code-label">动态验证码</div>
+                            <div class="code-digits" id="code-display">------</div>
+                            <div class="progress-ring-container">
+                                <svg class="progress-ring" width="80" height="80">
+                                    <circle class="progress-ring-bg" cx="40" cy="40" r="36"></circle>
+                                    <circle class="progress-ring-fill" id="progress-ring" cx="40" cy="40" r="36" stroke-dasharray="226.2" stroke-dashoffset="0"></circle>
+                                </svg>
+                                <span class="countdown-text" id="countdown-text">30</span>
+                            </div>
+                        </div>
+
+                        <div class="btn-group">
+                            <button class="btn-glow" onclick="copyCode()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                                </svg>
+                                复制
+                            </button>
+                            <button class="btn-glow btn-purple" onclick="saveCurrentAccount()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+                                </svg>
+                                保存账户
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：账户列表 -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="card-title-icon" style="background: rgba(179, 71, 234, 0.1); border: 1px solid rgba(179, 71, 234, 0.2);">&#128190;</div>
+                        <span class="card-title-text">已保存账户</span>
+                    </div>
+                    <span style="font-size: 0.7rem; color: #666;" id="account-count">0 个账户</span>
+                </div>
+                <div class="card-body">
+                    <!-- 添加表单 -->
+                    <div class="add-form">
+                        <input type="text" id="save-name" placeholder="账户名" class="input-glow name-input" autocomplete="off">
+                        <input type="text" id="save-secret" placeholder="Base32 密钥" class="input-glow secret-input" autocomplete="off">
+                        <button class="btn-glow btn-purple" onclick="addAccount()" style="flex-shrink: 0; padding: 0 16px;">+</button>
+                    </div>
+
+                    <!-- 分类标签 -->
+                    <div class="category-tabs" id="category-tabs">
+                        <button class="category-tab active" data-category="all">全部</button>
+                        <button class="category-tab" data-category="social">社交</button>
+                        <button class="category-tab" data-category="work">工作</button>
+                        <button class="category-tab" data-category="finance">金融</button>
+                        <button class="category-tab" data-category="game">游戏</button>
+                        <button class="category-tab" data-category="other">其他</button>
+                    </div>
+
+                    <!-- 账户列表 -->
+                    <div class="accounts-list" id="accounts-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- 导入模态框 -->
+    <div class="modal-overlay" id="import-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">导入账户数据</span>
+                <button class="modal-close" onclick="hideImportModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label class="input-label">粘贴导出的数据</label>
+                    <textarea id="import-data" class="input-glow" style="height: 150px; text-align: left; font-size: 0.7rem; letter-spacing: 0.02em;" placeholder="粘贴之前导出的 JSON 数据..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-glow" onclick="hideImportModal()">取消</button>
+                <button class="btn-glow btn-green" onclick="importAccounts()">确认导入</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑模态框 -->
+    <div class="modal-overlay" id="edit-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">编辑账户</span>
+                <button class="modal-close" onclick="hideEditModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label class="input-label">账户名</label>
+                    <input type="text" id="edit-name" class="input-glow" style="text-align: left; text-transform: none;">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">分类</label>
+                    <select class="option-select" id="edit-category" style="width: 100%;">
+                        <option value="social">社交</option>
+                        <option value="work">工作</option>
+                        <option value="finance">金融</option>
+                        <option value="game">游戏</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+                <input type="hidden" id="edit-index">
+            </div>
+            <div class="modal-footer">
+                <button class="btn-glow" onclick="hideEditModal()">取消</button>
+                <button class="btn-glow btn-green" onclick="saveEdit()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 全局变量 ====================
+        const STORAGE_KEY = '2fa_pro_accounts_v1';
+        const STATS_KEY = '2fa_pro_stats_v1';
+        const THEME_KEY = '2fa_pro_theme';
+        let currentTotp = null;
+        let lastToken = '';
+        let currentCategory = 'all';
+        let copiedToday = 0;
+
+        // ==================== 主题切换 ====================
+        function initTheme() {
+            const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem(THEME_KEY, newTheme);
+            showToast(`已切换至${newTheme === 'dark' ? '暗色' : '亮色'}主题`);
+        }
+
+        // ==================== 初始化 ====================
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            initParticles();
+            initCategoryTabs();
+            initSearch();
+            renderAccountsList();
+            updateStats();
+            initTime();
+            setInterval(updateAllCodes, 1000);
+            setInterval(updateTime, 1000);
+        });
+
+        // ==================== 生成器逻辑 ====================
+        const secretInput = document.getElementById('secret');
+        const codeDisplay = document.getElementById('code-display');
+        const progressRing = document.getElementById('progress-ring');
+        const countdownText = document.getElementById('countdown-text');
+
+        secretInput.addEventListener('input', setupTOTP);
+
+        document.getElementById('digits-select').addEventListener('change', setupTOTP);
+        document.getElementById('period-select').addEventListener('change', setupTOTP);
+        document.getElementById('algorithm-select').addEventListener('change', setupTOTP);
+
+        function setupTOTP() {
+            const secretValue = secretInput.value.replace(/\s+/g, '').toUpperCase();
+            if (!secretValue) {
+                codeDisplay.innerText = '------';
+                codeDisplay.classList.remove('expiring', 'updated');
+                currentTotp = null;
+                lastToken = '';
+                return;
+            }
+
+            try {
+                const digits = parseInt(document.getElementById('digits-select').value);
+                const period = parseInt(document.getElementById('period-select').value);
+                const algorithm = document.getElementById('algorithm-select').value;
+
+                currentTotp = new OTPAuth.TOTP({
+                    issuer: '2FA Pro',
+                    label: 'User',
+                    algorithm: algorithm,
+                    digits: digits,
+                    period: period,
+                    secret: OTPAuth.Secret.fromBase32(secretValue)
+                });
+                updateGeneratorCode();
+            } catch (err) {
+                codeDisplay.innerText = '------';
+                codeDisplay.classList.remove('expiring', 'updated');
+                currentTotp = null;
+                lastToken = '';
+            }
+        }
+
+        function updateGeneratorCode() {
+            if (!currentTotp) return;
+
+            const token = currentTotp.generate();
+            const displayToken = token.length === 8
+                ? token.slice(0, 4) + ' ' + token.slice(4)
+                : token.slice(0, 3) + ' ' + token.slice(3);
+            codeDisplay.innerText = displayToken;
+
+            if (lastToken && token !== lastToken) {
+                codeDisplay.classList.remove('updated');
+                void codeDisplay.offsetWidth;
+                codeDisplay.classList.add('updated');
+            }
+            lastToken = token;
+
+            const period = currentTotp.period;
+            const epoch = Math.floor(Date.now() / 1000);
+            const remaining = period - (epoch % period);
+            countdownText.innerText = remaining;
+
+            // 更新进度环
+            const circumference = 2 * Math.PI * 36;
+            const offset = circumference * (1 - remaining / period);
+            progressRing.style.strokeDashoffset = offset;
+
+            if (remaining <= 5) {
+                progressRing.classList.add('warning');
+                codeDisplay.classList.add('expiring');
+                countdownText.classList.add('warning');
+            } else {
+                progressRing.classList.remove('warning');
+                codeDisplay.classList.remove('expiring');
+                countdownText.classList.remove('warning');
+            }
+        }
+
+        function copyCode() {
+            if (!currentTotp) return;
+            const rawCode = codeDisplay.innerText.replace(/\s+/g, '');
+            if (rawCode === '------') return;
+            copyToClipboard(rawCode, '验证码已复制');
+            incrementCopied();
+        }
+
+        // ==================== 账户管理 ====================
+        function getAccounts() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function saveAccounts(accounts) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+        }
+
+        function addAccount() {
+            const nameInput = document.getElementById('save-name');
+            const secretInput = document.getElementById('save-secret');
+            const name = nameInput.value.trim();
+            const secret = secretInput.value.replace(/\s+/g, '').toUpperCase();
+            const category = document.getElementById('category-select').value;
+
+            if (!name || !secret) {
+                showToast('请输入账户名和密钥');
+                return;
+            }
+
+            try {
+                OTPAuth.Secret.fromBase32(secret);
+            } catch (e) {
+                showToast('无效的 Base32 密钥');
+                return;
+            }
+
+            const accounts = getAccounts();
+            if (accounts.find(a => a.name === name)) {
+                showToast('账户名已存在');
+                return;
+            }
+
+            accounts.push({
+                name,
+                secret,
+                category,
+                digits: parseInt(document.getElementById('digits-select').value),
+                period: parseInt(document.getElementById('period-select').value),
+                algorithm: document.getElementById('algorithm-select').value,
+                createdAt: Date.now()
+            });
+
+            saveAccounts(accounts);
+            nameInput.value = '';
+            secretInput.value = '';
+            renderAccountsList();
+            updateStats();
+            showToast(`账户 "${name}" 已保存`);
+        }
+
+        function deleteAccount(index) {
+            const accounts = getAccounts();
+            const name = accounts[index].name;
+            accounts.splice(index, 1);
+            saveAccounts(accounts);
+            renderAccountsList();
+            updateStats();
+            showToast(`账户 "${name}" 已删除`);
+        }
+
+        function copyAccountCode(index) {
+            const accounts = getAccounts();
+            const acct = accounts[index];
+            try {
+                const totp = new OTPAuth.TOTP({
+                    issuer: '2FA Pro',
+                    label: acct.name,
+                    algorithm: acct.algorithm || 'SHA1',
+                    digits: acct.digits || 6,
+                    period: acct.period || 30,
+                    secret: OTPAuth.Secret.fromBase32(acct.secret)
+                });
+                copyToClipboard(totp.generate(), `${acct.name} 验证码已复制`);
+                incrementCopied();
+            } catch (e) {}
+        }
+
+        function copyAllCodes() {
+            const accounts = getAccounts();
+            if (accounts.length === 0) {
+                showToast('暂无保存的账户');
+                return;
+            }
+
+            let text = '';
+            accounts.forEach(acct => {
+                try {
+                    const totp = new OTPAuth.TOTP({
+                        issuer: '2FA Pro',
+                        label: acct.name,
+                        algorithm: acct.algorithm || 'SHA1',
+                        digits: acct.digits || 6,
+                        period: acct.period || 30,
+                        secret: OTPAuth.Secret.fromBase32(acct.secret)
+                    });
+                    text += `${acct.name}: ${totp.generate()}\n`;
+                } catch (e) {}
+            });
+
+            copyToClipboard(text.trim(), '所有验证码已复制');
+            incrementCopied();
+        }
+
+        // ==================== 编辑功能 ====================
+        function showEditModal(index) {
+            const accounts = getAccounts();
+            const acct = accounts[index];
+            document.getElementById('edit-name').value = acct.name;
+            document.getElementById('edit-category').value = acct.category || 'other';
+            document.getElementById('edit-index').value = index;
+            document.getElementById('edit-modal').classList.add('show');
+        }
+
+        function hideEditModal() {
+            document.getElementById('edit-modal').classList.remove('show');
+        }
+
+        function saveEdit() {
+            const index = parseInt(document.getElementById('edit-index').value);
+            const accounts = getAccounts();
+            accounts[index].name = document.getElementById('edit-name').value.trim();
+            accounts[index].category = document.getElementById('edit-category').value;
+            saveAccounts(accounts);
+            hideEditModal();
+            renderAccountsList();
+            showToast('账户已更新');
+        }
+
+        // ==================== 导入导出 ====================
+        function exportAccounts() {
+            const accounts = getAccounts();
+            if (accounts.length === 0) {
+                showToast('暂无可导出的账户');
+                return;
+            }
+            const data = JSON.stringify(accounts, null, 2);
+            copyToClipboard(data, `已导出 ${accounts.length} 个账户`);
+        }
+
+        function showImportModal() {
+            document.getElementById('import-modal').classList.add('show');
+        }
+
+        function hideImportModal() {
+            document.getElementById('import-modal').classList.remove('show');
+        }
+
+        function importAccounts() {
+            const data = document.getElementById('import-data').value.trim();
+            if (!data) {
+                showToast('请粘贴数据');
+                return;
+            }
+
+            try {
+                const imported = JSON.parse(data);
+                if (!Array.isArray(imported)) {
+                    showToast('无效的数据格式');
+                    return;
+                }
+
+                const accounts = getAccounts();
+                let added = 0;
+                imported.forEach(acct => {
+                    if (acct.name && acct.secret && !accounts.find(a => a.name === acct.name)) {
+                        accounts.push(acct);
+                        added++;
+                    }
+                });
+
+                saveAccounts(accounts);
+                hideImportModal();
+                renderAccountsList();
+                updateStats();
+                showToast(`成功导入 ${added} 个账户`);
+            } catch (e) {
+                showToast('无效的 JSON 数据');
+            }
+        }
+
+        // ==================== 渲染列表 ====================
+        function renderAccountsList() {
+            const listEl = document.getElementById('accounts-list');
+            const countEl = document.getElementById('account-count');
+            const accounts = getAccounts();
+            const filteredAccounts = currentCategory === 'all'
+                ? accounts
+                : accounts.filter(a => (a.category || 'other') === currentCategory);
+
+            countEl.textContent = `${accounts.length} 个账户`;
+
+            if (filteredAccounts.length === 0) {
+                listEl.innerHTML = `
+                    <div class="empty-state">
+                        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                        <p>暂无保存的账户</p>
+                    </div>`;
+                return;
+            }
+
+            const categoryIcons = {
+                social: '💬',
+                work: '💼',
+                finance: '💰',
+                game: '🎮',
+                other: '📦'
+            };
+
+            const categoryColors = {
+                social: 'rgba(0, 245, 255, 0.1)',
+                work: 'rgba(179, 71, 234, 0.1)',
+                finance: 'rgba(0, 255, 159, 0.1)',
+                game: 'rgba(255, 149, 0, 0.1)',
+                other: 'rgba(255, 255, 255, 0.05)'
+            };
+
+            listEl.innerHTML = filteredAccounts.map((acct, i) => {
+                const realIndex = accounts.indexOf(acct);
+                let code = '------';
+                let remaining = 30;
+                let period = acct.period || 30;
+
+                try {
+                    const totp = new OTPAuth.TOTP({
+                        issuer: '2FA Pro',
+                        label: acct.name,
+                        algorithm: acct.algorithm || 'SHA1',
+                        digits: acct.digits || 6,
+                        period: period,
+                        secret: OTPAuth.Secret.fromBase32(acct.secret)
+                    });
+                    code = totp.generate();
+                    const epoch = Math.floor(Date.now() / 1000);
+                    remaining = period - (epoch % period);
+                } catch (e) {}
+
+                const displayCode = code.length === 8
+                    ? code.slice(0, 4) + ' ' + code.slice(4)
+                    : code.slice(0, 3) + ' ' + code.slice(3);
+
+                const masked = acct.secret.length > 12
+                    ? acct.secret.slice(0, 6) + '····' + acct.secret.slice(-4)
+                    : acct.secret;
+
+                const progressHeight = (remaining / period) * 100;
+
+                return `
+                    <div class="account-item">
+                        <div class="account-icon" style="background: ${categoryColors[acct.category || 'other']}; border: 1px solid rgba(255,255,255,0.1);">
+                            ${categoryIcons[acct.category || 'other']}
+                        </div>
+                        <div class="account-info">
+                            <div class="account-name">${escapeHtml(acct.name)}</div>
+                            <div class="account-meta">
+                                <span class="account-secret">${masked}</span>
+                                <span class="account-category">${acct.category || 'other'}</span>
+                            </div>
+                        </div>
+                        <div class="account-code" id="code-${realIndex}">${displayCode}</div>
+                        <div class="account-progress">
+                            <div class="account-progress-bar" style="height: ${progressHeight}%;" id="progress-${realIndex}"></div>
+                        </div>
+                        <div class="account-actions">
+                            <button class="btn-icon" onclick="copyAccountCode(${realIndex})" title="复制">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                                </svg>
+                            </button>
+                            <button class="btn-icon" onclick="showEditModal(${realIndex})" title="编辑">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                </svg>
+                            </button>
+                            <button class="btn-icon delete" onclick="deleteAccount(${realIndex})" title="删除">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        function updateAllCodes() {
+            if (currentTotp) updateGeneratorCode();
+
+            const accounts = getAccounts();
+            accounts.forEach((acct, i) => {
+                const codeEl = document.getElementById(`code-${i}`);
+                const progressEl = document.getElementById(`progress-${i}`);
+                if (!codeEl) return;
+
+                try {
+                    const period = acct.period || 30;
+                    const totp = new OTPAuth.TOTP({
+                        issuer: '2FA Pro',
+                        label: acct.name,
+                        algorithm: acct.algorithm || 'SHA1',
+                        digits: acct.digits || 6,
+                        period: period,
+                        secret: OTPAuth.Secret.fromBase32(acct.secret)
+                    });
+                    const token = totp.generate();
+                    const displayToken = token.length === 8
+                        ? token.slice(0, 4) + ' ' + token.slice(4)
+                        : token.slice(0, 3) + ' ' + token.slice(3);
+                    codeEl.textContent = displayToken;
+
+                    if (progressEl) {
+                        const epoch = Math.floor(Date.now() / 1000);
+                        const remaining = period - (epoch % period);
+                        progressEl.style.height = ((remaining / period) * 100) + '%';
+                    }
+                } catch (e) {}
+            });
+        }
+
+        // ==================== 分类筛选 ====================
+        function initCategoryTabs() {
+            document.querySelectorAll('.category-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    currentCategory = tab.dataset.category;
+                    renderAccountsList();
+                });
+            });
+        }
+
+        // ==================== 搜索功能 ====================
+        function initSearch() {
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase().trim();
+                const accounts = getAccounts();
+                const filtered = query
+                    ? accounts.filter(a => a.name.toLowerCase().includes(query))
+                    : accounts;
+
+                // 临时替换显示
+                const listEl = document.getElementById('accounts-list');
+                if (filtered.length === 0 && query) {
+                    listEl.innerHTML = `
+                        <div class="empty-state">
+                            <p>未找到匹配的账户</p>
+                        </div>`;
+                } else {
+                    renderAccountsList();
+                }
+            });
+        }
+
+        // ==================== 统计功能 ====================
+        function updateStats() {
+            const accounts = getAccounts();
+            document.getElementById('stat-total').textContent = accounts.length;
+            loadCopiedToday();
+        }
+
+        function loadCopiedToday() {
+            try {
+                const stats = JSON.parse(localStorage.getItem(STATS_KEY) || '{}');
+                const today = new Date().toDateString();
+                if (stats.date === today) {
+                    copiedToday = stats.count || 0;
+                } else {
+                    copiedToday = 0;
+                }
+                document.getElementById('stat-copied').textContent = copiedToday;
+            } catch (e) {
+                copiedToday = 0;
+            }
+        }
+
+        function incrementCopied() {
+            const today = new Date().toDateString();
+            copiedToday++;
+            localStorage.setItem(STATS_KEY, JSON.stringify({ date: today, count: copiedToday }));
+            document.getElementById('stat-copied').textContent = copiedToday;
+        }
+
+        function initTime() {
+            updateTime();
+        }
+
+        function updateTime() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            document.getElementById('stat-time').textContent = `${hours}:${minutes}`;
+        }
+
+        // ==================== 工具函数 ====================
+        function copyToClipboard(text, msg) {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => showToast(msg));
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.cssText = 'position:fixed;opacity:0;';
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); showToast(msg); } catch (e) {}
+                document.body.removeChild(ta);
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            clearTimeout(toast._timeout);
+            toast._timeout = setTimeout(() => toast.classList.remove('show'), 2500);
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function saveCurrentAccount() {
+            if (!currentTotp) {
+                showToast('请先输入有效的密钥');
+                return;
+            }
+            const secret = secretInput.value.replace(/\s+/g, '').toUpperCase();
+            const accounts = getAccounts();
+            if (accounts.find(a => a.secret === secret)) {
+                showToast('该密钥已保存');
+                return;
+            }
+
+            const digits = parseInt(document.getElementById('digits-select').value);
+            const period = parseInt(document.getElementById('period-select').value);
+            const algorithm = document.getElementById('algorithm-select').value;
+            const category = document.getElementById('category-select').value;
+
+            const autoName = `Account ${accounts.length + 1}`;
+            accounts.push({
+                name: autoName,
+                secret,
+                category,
+                digits,
+                period,
+                algorithm,
+                createdAt: Date.now()
+            });
+
+            saveAccounts(accounts);
+            renderAccountsList();
+            updateStats();
+            showToast(`账户 "${autoName}" 已保存`);
+        }
+
+        // ==================== 粒子背景 ====================
+        function initParticles() {
+            const container = document.getElementById('particles');
+            const colors = ['var(--neon-cyan)', 'var(--neon-purple)', 'var(--neon-pink)', 'var(--neon-green)'];
+
+            for (let i = 0; i < 60; i++) {
+                const p = document.createElement('div');
+                p.classList.add('particle');
+                p.style.left = Math.random() * 100 + '%';
+                p.style.bottom = -(Math.random() * 100) + 'px';
+                p.style.animationDuration = (10 + Math.random() * 25) + 's';
+                p.style.animationDelay = Math.random() * 20 + 's';
+                const size = 1 + Math.random() * 3;
+                p.style.width = size + 'px';
+                p.style.height = size + 'px';
+                p.style.background = colors[Math.floor(Math.random() * colors.length)];
+                p.style.boxShadow = `0 0 ${size * 2}px ${p.style.background}`;
+                container.appendChild(p);
+            }
+        }
+    </script>
+</body>
+</html>

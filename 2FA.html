@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2FA 动态验证码生成器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/otpauth/9.3.1/otpauth.umd.min.js"></script>
+    <style>
+        :root {
+            --neon-cyan: #00f0ff;
+            --neon-purple: #b347ea;
+            --neon-pink: #ff2d95;
+            --dark-bg: #0a0a0f;
+            --card-bg: rgba(15, 15, 30, 0.85);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--dark-bg);
+            font-family: 'Courier New', 'JetBrains Mono', monospace;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        /* 动态网格背景 */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background-image:
+                linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            animation: gridMove 20s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes gridMove {
+            0% { background-position: 0 0, 0 0; }
+            100% { background-position: 40px 40px, -40px 40px; }
+        }
+
+        /* 粒子光点 */
+        .particles {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+        }
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: var(--neon-cyan);
+            border-radius: 50%;
+            animation: floatUp linear infinite;
+            opacity: 0;
+        }
+        @keyframes floatUp {
+            0%   { transform: translateY(0) scale(1); opacity: 0; }
+            10%  { opacity: 0.8; }
+            90%  { opacity: 0.2; }
+            100% { transform: translateY(-100vh) scale(0.3); opacity: 0; }
+        }
+
+        /* 主容器 - 双栏布局 */
+        .main-container {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            gap: 24px;
+            width: 100%;
+            max-width: 1000px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        /* 玻璃拟态卡片 */
+        .glass-card {
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            box-shadow:
+                0 0 30px rgba(0, 240, 255, 0.08),
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.3), rgba(179, 71, 234, 0.3), transparent);
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        /* 左侧面板 */
+        .panel-left {
+            flex: 1 1 380px;
+            max-width: 440px;
+            min-width: 340px;
+        }
+
+        /* 右侧面板 */
+        .panel-right {
+            flex: 1 1 380px;
+            max-width: 500px;
+            min-width: 340px;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+        .panel-header .icon-circle {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        .icon-shield {
+            background: rgba(0, 240, 255, 0.12);
+            border: 1px solid rgba(0, 240, 255, 0.25);
+        }
+        .icon-save {
+            background: rgba(179, 71, 234, 0.12);
+            border: 1px solid rgba(179, 71, 234, 0.25);
+        }
+
+        .panel-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #e0e0e0;
+            letter-spacing: 0.04em;
+        }
+        .panel-subtitle {
+            font-size: 0.7rem;
+            color: #666;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        /* 输入框 */
+        .input-glow {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #e0e0e0;
+            font-family: inherit;
+            font-size: 0.9rem;
+            text-align: center;
+            letter-spacing: 0.15em;
+            outline: none;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+        .input-glow:focus {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.15), 0 0 0 1px rgba(0, 240, 255, 0.1);
+            background: rgba(0, 240, 255, 0.04);
+        }
+        .input-glow::placeholder {
+            color: #444;
+            letter-spacing: 0.05em;
+            text-transform: none;
+        }
+
+        /* 验证码展示 */
+        .code-display-area {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 240, 255, 0.15);
+            border-radius: 16px;
+            padding: 28px 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .code-display-area::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at center, rgba(0, 240, 255, 0.06) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .code-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: #555;
+            margin-bottom: 12px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .code-digits {
+            font-size: 3.2rem;
+            font-weight: 900;
+            letter-spacing: 0.18em;
+            color: var(--neon-cyan);
+            text-shadow:
+                0 0 10px rgba(0, 240, 255, 0.5),
+                0 0 30px rgba(0, 240, 255, 0.2),
+                0 0 60px rgba(0, 240, 255, 0.1);
+            position: relative;
+            z-index: 1;
+            transition: all 0.3s ease;
+            font-variant-numeric: tabular-nums;
+        }
+        .code-digits.expiring {
+            color: var(--neon-pink);
+            text-shadow:
+                0 0 10px rgba(255, 45, 149, 0.6),
+                0 0 30px rgba(255, 45, 149, 0.3),
+                0 0 60px rgba(255, 45, 149, 0.15);
+            animation: pulse 0.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .code-digits.updated {
+            animation: codePop 0.25s ease-out;
+        }
+        @keyframes codePop {
+            0% { transform: scale(1.08); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* 进度条 */
+        .progress-track {
+            height: 3px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 16px;
+            position: relative;
+            z-index: 1;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, var(--neon-cyan), #00c8d6);
+            box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+            transition: width 1s linear;
+        }
+        .progress-fill.warning {
+            background: linear-gradient(90deg, var(--neon-pink), #ff6b9d);
+            box-shadow: 0 0 8px rgba(255, 45, 149, 0.5);
+        }
+
+        /* 倒计时 */
+        .countdown-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: #777;
+            margin-top: 12px;
+            position: relative;
+            z-index: 1;
+        }
+        .countdown-num {
+            font-weight: 700;
+            color: var(--neon-cyan);
+            font-size: 0.85rem;
+            min-width: 20px;
+            text-align: center;
+        }
+        .countdown-num.warning {
+            color: var(--neon-pink);
+        }
+
+        /* 按钮 */
+        .btn-glow {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            border: 1px solid rgba(0, 240, 255, 0.25);
+            background: rgba(0, 240, 255, 0.06);
+            color: var(--neon-cyan);
+            transition: all 0.25s ease;
+            position: relative;
+            z-index: 1;
+        }
+        .btn-glow:hover {
+            background: rgba(0, 240, 255, 0.14);
+            border-color: rgba(0, 240, 255, 0.45);
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+            transform: translateY(-1px);
+        }
+        .btn-glow:active {
+            transform: scale(0.97);
+        }
+
+        .btn-save {
+            border-color: rgba(179, 71, 234, 0.25);
+            background: rgba(179, 71, 234, 0.06);
+            color: var(--neon-purple);
+        }
+        .btn-save:hover {
+            background: rgba(179, 71, 234, 0.14);
+            border-color: rgba(179, 71, 234, 0.45);
+            box-shadow: 0 0 20px rgba(179, 71, 234, 0.2);
+        }
+
+        .btn-delete {
+            border: none;
+            background: transparent;
+            color: #555;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            transition: all 0.2s;
+        }
+        .btn-delete:hover {
+            color: var(--neon-pink);
+            background: rgba(255, 45, 149, 0.1);
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 240, 255, 0.12);
+            border: 1px solid rgba(0, 240, 255, 0.25);
+            color: var(--neon-cyan);
+            padding: 10px 24px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
+
+        /* 保存账户列表 */
+        .saved-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 420px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .saved-list::-webkit-scrollbar {
+            width: 4px;
+        }
+        .saved-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .saved-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 2px;
+        }
+
+        .saved-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            transition: all 0.25s ease;
+            gap: 12px;
+        }
+        .saved-item:hover {
+            border-color: rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .saved-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .saved-item-name {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #ccc;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .saved-item-secret {
+            font-size: 0.62rem;
+            color: #555;
+            letter-spacing: 0.05em;
+            margin-top: 2px;
+        }
+
+        .saved-item-code {
+            font-size: 1.3rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            color: var(--neon-purple);
+            text-shadow: 0 0 8px rgba(179, 71, 234, 0.4);
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            min-width: 80px;
+            text-align: right;
+        }
+
+        .saved-item-copy {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #666;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.65rem;
+            letter-spacing: 0.04em;
+            transition: all 0.2s;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+        .saved-item-copy:hover {
+            border-color: var(--neon-purple);
+            color: var(--neon-purple);
+            background: rgba(179, 71, 234, 0.08);
+        }
+
+        .saved-item-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #444;
+        }
+        .empty-state svg {
+            margin: 0 auto 12px;
+            opacity: 0.3;
+        }
+        .empty-state p {
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        /* 添加账户表单 */
+        .add-form {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .add-form .input-glow {
+            text-align: left;
+            font-size: 0.78rem;
+            padding: 9px 12px;
+            letter-spacing: 0.03em;
+        }
+        .add-form .input-glow.name-input {
+            flex: 0 0 35%;
+            text-transform: none;
+        }
+        .add-form .input-glow.secret-input {
+            flex: 1;
+        }
+
+        .error-text {
+            color: var(--neon-pink);
+            font-size: 0.7rem;
+            text-align: center;
+            margin-top: 6px;
+            display: none;
+            letter-spacing: 0.04em;
+        }
+
+        @media (max-width: 800px) {
+            .main-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            .panel-left, .panel-right {
+                max-width: 100%;
+                flex: 1 1 auto;
+            }
+            .code-digits {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 背景效果 -->
+    <div class="bg-grid"></div>
+    <div class="particles" id="particles"></div>
+
+    <!-- 主容器 -->
+    <div class="main-container">
+
+        <!-- ==================== 左侧面板：2FA 生成器 ==================== -->
+        <div class="glass-card panel-left">
+            <div style="padding: 28px;">
+                <div class="panel-header">
+                    <div class="icon-circle icon-shield">&#128737;</div>
+                    <div>
+                        <div class="panel-title">2FA 验证码生成器</div>
+                        <div class="panel-subtitle">TOTP · SHA1 · 6-DIGIT</div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 18px;">
+                    <label style="display:block;font-size:0.7rem;color:#777;letter-spacing:0.06em;margin-bottom:6px;text-transform:uppercase;">Secret Key</label>
+                    <input type="text" id="secret" placeholder="输入 Base32 密钥..."
+                        class="input-glow" autocomplete="off">
+                    <p id="error-msg" class="error-text">请输入有效的 Base32 密钥</p>
+                </div>
+
+                <div class="code-display-area">
+                    <div class="code-label">动态验证码</div>
+                    <div class="code-digits" id="code-display">------</div>
+                    <div class="progress-track">
+                        <div class="progress-fill" id="progress-bar" style="width:100%;"></div>
+                    </div>
+                    <div class="countdown-badge">
+                        <span>刷新倒计时</span>
+                        <span class="countdown-num" id="time-left">30</span>
+                        <span>s</span>
+                    </div>
+                </div>
+
+                <div style="display:flex;gap:10px;margin-top:16px;">
+                    <button class="btn-glow" onclick="copyCode()" style="flex:1;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        复制验证码
+                    </button>
+                    <button class="btn-glow btn-save" onclick="saveCurrentAccount()" style="flex:1;">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                        保存到右侧
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== 右侧面板：2FA 码记录保存 ==================== -->
+        <div class="glass-card panel-right">
+            <div style="padding: 28px;">
+                <div class="panel-header">
+                    <div class="icon-circle icon-save">&#128190;</div>
+                    <div>
+                        <div class="panel-title">已保存的 2FA 账户</div>
+                        <div class="panel-subtitle" id="saved-count">0 个账户 · 本地存储</div>
+                    </div>
+                </div>
+
+                <!-- 添加表单 -->
+                <div class="add-form">
+                    <input type="text" id="save-name" placeholder="账户名" class="input-glow name-input" autocomplete="off">
+                    <input type="text" id="save-secret" placeholder="Base32 密钥" class="input-glow secret-input" autocomplete="off">
+                    <button class="btn-glow btn-save" onclick="addAccount()" style="flex-shrink:0;padding:9px 14px;font-size:0.75rem;">+ 添加</button>
+                </div>
+                <p id="save-error" class="error-text">请输入账户名和有效的 Base32 密钥</p>
+                <p id="duplicate-error" class="error-text">该账户名已存在</p>
+
+                <!-- 账户列表 -->
+                <div class="saved-list" id="saved-list"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ==================== 左侧：生成器逻辑 ====================
+        const secretInput = document.getElementById('secret');
+        const codeDisplay = document.getElementById('code-display');
+        const progressBar = document.getElementById('progress-bar');
+        const timeLeftDisplay = document.getElementById('time-left');
+        const errorMsg = document.getElementById('error-msg');
+        const toast = document.getElementById('toast');
+
+        let currentTotp = null;
+        let lastToken = '';
+
+        function setupTOTP() {
+            const secretValue = secretInput.value.replace(/\s+/g, '').toUpperCase();
+            if (!secretValue) {
+                codeDisplay.innerText = '------';
+                codeDisplay.classList.remove('expiring', 'updated');
+                progressBar.style.width = '100%';
+                progressBar.classList.remove('warning');
+                errorMsg.style.display = 'none';
+                currentTotp = null;
+                lastToken = '';
+                return;
+            }
+            try {
+                currentTotp = new OTPAuth.TOTP({
+                    issuer: 'Local',
+                    label: 'User',
+                    algorithm: 'SHA1',
+                    digits: 6,
+                    period: 30,
+                    secret: OTPAuth.Secret.fromBase32(secretValue)
+                });
+                errorMsg.style.display = 'none';
+                updateCode();
+            } catch (err) {
+                codeDisplay.innerText = '------';
+                codeDisplay.classList.remove('expiring', 'updated');
+                errorMsg.style.display = 'block';
+                currentTotp = null;
+                lastToken = '';
+            }
+        }
+
+        function updateCode() {
+            if (!currentTotp) return;
+            const token = currentTotp.generate();
+            codeDisplay.innerText = token.slice(0, 3) + ' ' + token.slice(3);
+
+            if (lastToken && token !== lastToken) {
+                codeDisplay.classList.remove('updated');
+                void codeDisplay.offsetWidth;
+                codeDisplay.classList.add('updated');
+            }
+            lastToken = token;
+
+            const epoch = Math.floor(Date.now() / 1000);
+            const period = 30;
+            const remaining = period - (epoch % period);
+            timeLeftDisplay.innerText = remaining;
+            const percentage = (remaining / period) * 100;
+            progressBar.style.width = percentage + '%';
+
+            if (remaining <= 5) {
+                progressBar.classList.add('warning');
+                codeDisplay.classList.add('expiring');
+                timeLeftDisplay.classList.add('warning');
+            } else {
+                progressBar.classList.remove('warning');
+                codeDisplay.classList.remove('expiring');
+                timeLeftDisplay.classList.remove('warning');
+            }
+        }
+
+        function copyCode() {
+            if (!currentTotp) return;
+            const rawCode = codeDisplay.innerText.replace(/\s+/g, '');
+            if (rawCode === '------') return;
+            copyToClipboard(rawCode, '验证码已复制');
+        }
+
+        function copyToClipboard(text, msg) {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => showToast(msg));
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed'; ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); showToast(msg); } catch (e) {}
+                document.body.removeChild(ta);
+            }
+        }
+
+        function showToast(msg) {
+            toast.textContent = msg;
+            toast.style.opacity = '1';
+            clearTimeout(toast._timeout);
+            toast._timeout = setTimeout(() => { toast.style.opacity = '0'; }, 1800);
+        }
+
+        function saveCurrentAccount() {
+            if (!currentTotp) {
+                showToast('请先输入有效的密钥');
+                return;
+            }
+            const secret = secretInput.value.replace(/\s+/g, '').toUpperCase();
+            const existing = getAccounts();
+            const autoName = 'Account ' + (existing.length + 1);
+            if (existing.find(a => a.secret === secret)) {
+                showToast('该密钥已保存');
+                return;
+            }
+            document.getElementById('save-name').value = autoName;
+            document.getElementById('save-secret').value = secret;
+            addAccount();
+        }
+
+        secretInput.addEventListener('input', setupTOTP);
+        setInterval(() => { if (currentTotp) updateCode(); }, 1000);
+
+        // ==================== 右侧：保存账户逻辑 ====================
+        const STORAGE_KEY = 'fa_accounts_v2';
+
+        function getAccounts() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function saveAccounts(accounts) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+        }
+
+        function addAccount() {
+            const nameInput = document.getElementById('save-name');
+            const secretInput = document.getElementById('save-secret');
+            const saveError = document.getElementById('save-error');
+            const dupError = document.getElementById('duplicate-error');
+            const name = nameInput.value.trim();
+            const secret = secretInput.value.replace(/\s+/g, '').toUpperCase();
+
+            saveError.style.display = 'none';
+            dupError.style.display = 'none';
+
+            if (!name || !secret) {
+                saveError.style.display = 'block';
+                return;
+            }
+
+            try {
+                OTPAuth.Secret.fromBase32(secret);
+            } catch (e) {
+                saveError.style.display = 'block';
+                return;
+            }
+
+            const accounts = getAccounts();
+            if (accounts.find(a => a.name === name)) {
+                dupError.style.display = 'block';
+                return;
+            }
+
+            accounts.push({ name, secret });
+            saveAccounts(accounts);
+            nameInput.value = '';
+            secretInput.value = '';
+            renderSavedList();
+            showToast('账户 "' + name + '" 已保存');
+        }
+
+        function deleteAccount(index) {
+            const accounts = getAccounts();
+            const name = accounts[index].name;
+            accounts.splice(index, 1);
+            saveAccounts(accounts);
+            renderSavedList();
+            showToast('账户 "' + name + '" 已删除');
+        }
+
+        function copySavedCode(index) {
+            const accounts = getAccounts();
+            const acct = accounts[index];
+            try {
+                const totp = new OTPAuth.TOTP({
+                    issuer: 'Local',
+                    label: acct.name,
+                    algorithm: 'SHA1',
+                    digits: 6,
+                    period: 30,
+                    secret: OTPAuth.Secret.fromBase32(acct.secret)
+                });
+                copyToClipboard(totp.generate(), acct.name + ' 验证码已复制');
+            } catch (e) {}
+        }
+
+        const EMPTY_STATE_HTML = `
+            <div class="empty-state">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <p>暂无保存的 2FA 账户</p>
+                <p style="font-size:0.65rem;color:#333;margin-top:4px;">添加账户后，验证码将实时显示在此处</p>
+            </div>`;
+
+        function renderSavedList() {
+            const listEl = document.getElementById('saved-list');
+            const countEl = document.getElementById('saved-count');
+            const accounts = getAccounts();
+
+            countEl.textContent = accounts.length + ' 个账户 · 本地存储';
+
+            if (accounts.length === 0) {
+                listEl.innerHTML = EMPTY_STATE_HTML;
+                return;
+            }
+
+            let html = '';
+            accounts.forEach((acct, i) => {
+                let code = '------';
+                try {
+                    const totp = new OTPAuth.TOTP({
+                        issuer: 'Local',
+                        label: acct.name,
+                        algorithm: 'SHA1',
+                        digits: 6,
+                        period: 30,
+                        secret: OTPAuth.Secret.fromBase32(acct.secret)
+                    });
+                    code = totp.generate();
+                } catch (e) {}
+
+                const masked = acct.secret.length > 12
+                    ? acct.secret.slice(0, 6) + '····' + acct.secret.slice(-4)
+                    : acct.secret;
+
+                html += `
+                    <div class="saved-item">
+                        <div class="saved-item-info">
+                            <div class="saved-item-name">${escapeHtml(acct.name)}</div>
+                            <div class="saved-item-secret">${escapeHtml(masked)}</div>
+                        </div>
+                        <div class="saved-item-code" id="saved-code-${i}">${code.slice(0,3)} ${code.slice(3)}</div>
+                        <div class="saved-item-actions">
+                            <button class="saved-item-copy" onclick="copySavedCode(${i})">复制</button>
+                            <button class="btn-delete" onclick="deleteAccount(${i})" title="删除">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                            </button>
+                        </div>
+                    </div>`;
+            });
+            listEl.innerHTML = html;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // 每秒刷新已保存账户的验证码
+        function refreshSavedCodes() {
+            const accounts = getAccounts();
+            accounts.forEach((acct, i) => {
+                const el = document.getElementById('saved-code-' + i);
+                if (!el) return;
+                try {
+                    const totp = new OTPAuth.TOTP({
+                        issuer: 'Local',
+                        label: acct.name,
+                        algorithm: 'SHA1',
+                        digits: 6,
+                        period: 30,
+                        secret: OTPAuth.Secret.fromBase32(acct.secret)
+                    });
+                    const token = totp.generate();
+                    el.textContent = token.slice(0, 3) + ' ' + token.slice(3);
+                } catch (e) {}
+            });
+        }
+
+        setInterval(refreshSavedCodes, 1000);
+
+        // 回车键添加账户
+        document.getElementById('save-secret').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') addAccount();
+        });
+        document.getElementById('save-name').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') document.getElementById('save-secret').focus();
+        });
+
+        // ==================== 粒子背景 ====================
+        (function initParticles() {
+            const container = document.getElementById('particles');
+            for (let i = 0; i < 40; i++) {
+                const p = document.createElement('div');
+                p.classList.add('particle');
+                p.style.left = Math.random() * 100 + '%';
+                p.style.bottom = -(Math.random() * 100) + 'px';
+                p.style.animationDuration = (8 + Math.random() * 20) + 's';
+                p.style.animationDelay = Math.random() * 15 + 's';
+                p.style.width = (1 + Math.random() * 2) + 'px';
+                p.style.height = p.style.width;
+                if (Math.random() > 0.6) {
+                    p.style.background = 'var(--neon-purple)';
+                }
+                container.appendChild(p);
+            }
+        })();
+
+        // 初始化渲染
+        renderSavedList();
+    </script>
+</body>
+</html>
