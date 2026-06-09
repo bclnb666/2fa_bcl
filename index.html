@@ -1,0 +1,249 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2FA Authenticator - Secure Token Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/otpauth/9.3.1/otpauth.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --navy-900: #0a1628; --navy-800: #0f1f3a; --navy-700: #162a4a;
+            --blue-600: #0066cc; --blue-500: #0080ff; --blue-400: #3399ff;
+            --teal-500: #00a87a; --teal-400: #00c78a;
+            --white: #ffffff; --gray-50: #f8fafc; --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0; --gray-300: #cbd5e1; --gray-400: #94a3b8;
+            --gray-500: #64748b; --gray-600: #475569; --gray-700: #334155;
+            --gray-800: #1e293b; --gray-900: #0f172a;
+            --radius-sm: 6px; --radius: 10px; --radius-lg: 16px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--gray-50); color: var(--gray-800); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+        .header { background: var(--navy-900); padding: 0 40px; height: 64px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+        .header-logo { display: flex; align-items: center; gap: 12px; color: var(--white); font-weight: 700; font-size: 18px; text-decoration: none; }
+        .header-logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--teal-500), var(--blue-500)); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+        .header-nav { display: flex; gap: 24px; }
+        .header-nav a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 14px; font-weight: 500; }
+        .header-nav a:hover { color: var(--white); }
+        .hero {
+            background: linear-gradient(160deg, var(--navy-900) 0%, var(--navy-800) 40%, var(--navy-700) 100%);
+            padding: 52px 40px; color: var(--white); position: relative; overflow: hidden;
+        }
+        .hero::after { content: ''; position: absolute; top: -50%; right: -10%; width: 500px; height: 500px; background: radial-gradient(circle, rgba(0,168,122,0.12) 0%, transparent 70%); border-radius: 50%; pointer-events: none; }
+        .hero::before { content: ''; position: absolute; bottom: -30%; left: -5%; width: 400px; height: 400px; background: radial-gradient(circle, rgba(0,128,255,0.08) 0%, transparent 70%); border-radius: 50%; pointer-events: none; }
+        .hero-inner { max-width: 1100px; margin: 0 auto; position: relative; z-index: 1; }
+        .hero h1 { font-size: 40px; font-weight: 800; letter-spacing: -0.8px; line-height: 1.2; margin-bottom: 12px; }
+        .hero h1 span { color: var(--teal-400); }
+        .hero p { font-size: 16px; color: rgba(255,255,255,0.65); max-width: 560px; line-height: 1.6; margin-bottom: 24px; }
+        .hero-stats { display: flex; gap: 36px; }
+        .hero-stat-num { font-size: 28px; font-weight: 800; color: var(--teal-400); }
+        .hero-stat-label { font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 32px 40px; }
+        .card { background: var(--white); border-radius: var(--radius-lg); padding: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04); border: 1px solid var(--gray-200); margin-bottom: 24px; }
+        .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .card-title { font-size: 16px; font-weight: 700; color: var(--gray-900); }
+        .card-badge { background: var(--gray-100); color: var(--gray-600); padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .input-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+        .input-group { flex: 1; min-width: 200px; }
+        .input-group label { display: block; font-size: 12px; font-weight: 600; color: var(--gray-600); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .input-group input, .input-group select { width: 100%; padding: 10px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); font-size: 14px; font-family: 'Inter', monospace, sans-serif; color: var(--gray-800); background: var(--gray-50); outline: none; }
+        .input-group input:focus, .input-group select:focus { border-color: var(--blue-500); background: var(--white); box-shadow: 0 0 0 3px rgba(0,128,255,0.08); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 22px; border-radius: 25px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; white-space: nowrap; }
+        .btn-primary { background: var(--blue-500); color: var(--white); }
+        .btn-primary:hover { background: var(--blue-600); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,128,255,0.3); }
+        .btn-teal { background: var(--teal-500); color: var(--white); }
+        .btn-teal:hover { background: var(--teal-400); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,168,122,0.3); }
+        .btn-sm { padding: 6px 14px; font-size: 12px; border-radius: 16px; }
+        .btn-icon { width: 34px; height: 34px; padding: 0; border-radius: 50%; font-size: 16px; background: var(--gray-100); color: var(--gray-600); border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+        .btn-icon:hover { background: var(--gray-200); color: var(--gray-800); }
+        .btn-icon.danger:hover { background: #fee2e2; color: #dc2626; }
+        .token-display { background: linear-gradient(135deg, var(--navy-900), var(--navy-800)); border-radius: var(--radius-lg); padding: 24px 32px; display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.06); }
+        .token-label { font-size: 12px; color: rgba(255,255,255,0.5); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .token-code { font-size: 42px; font-weight: 900; letter-spacing: 6px; color: var(--white); font-family: 'Inter', monospace; line-height: 1; }
+        .token-code span { color: var(--teal-400); }
+        .token-countdown { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .token-countdown-circle { width: 48px; height: 48px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; }
+        .token-countdown-num { font-size: 18px; font-weight: 700; color: var(--teal-400); }
+        .token-countdown-label { font-size: 10px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        .search-bar { position: relative; margin-bottom: 16px; }
+        .search-bar input { width: 100%; padding: 10px 14px 10px 38px; border: 1.5px solid var(--gray-200); border-radius: 25px; font-size: 14px; font-family: inherit; color: var(--gray-800); background: var(--gray-50); outline: none; }
+        .search-bar input:focus { border-color: var(--blue-500); background: var(--white); box-shadow: 0 0 0 3px rgba(0,128,255,0.08); }
+        .search-bar svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--gray-400); }
+        .category-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+        .category-tab { padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1.5px solid var(--gray-200); background: var(--white); color: var(--gray-600); }
+        .category-tab:hover { border-color: var(--gray-400); }
+        .category-tab.active { background: var(--navy-900); color: var(--white); border-color: var(--navy-900); }
+        .account-card { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: var(--white); border: 1px solid var(--gray-200); border-radius: var(--radius); margin-bottom: 8px; gap: 16px; }
+        .account-card:hover { border-color: var(--gray-300); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .account-info { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
+        .account-avatar { width: 42px; height: 42px; border-radius: var(--radius-sm); background: linear-gradient(135deg, var(--blue-500), var(--teal-500)); color: var(--white); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; flex-shrink: 0; }
+        .account-name { font-size: 14px; font-weight: 600; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .account-meta { font-size: 11px; color: var(--gray-400); margin-top: 2px; display: flex; gap: 8px; }
+        .account-code { font-size: 22px; font-weight: 800; letter-spacing: 3px; color: var(--navy-900); font-family: 'Inter', monospace; }
+        .account-progress { width: 3px; height: 32px; background: var(--gray-100); border-radius: 2px; overflow: hidden; }
+        .account-progress-fill { width: 100%; background: var(--teal-500); border-radius: 2px; transition: height 0.5s linear; }
+        .empty-state { text-align: center; padding: 48px 20px; color: var(--gray-400); }
+        .options-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+        .option-chip { padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1.5px solid var(--gray-200); background: var(--white); color: var(--gray-600); }
+        .option-chip:hover { border-color: var(--gray-400); }
+        .option-chip.active { background: var(--blue-500); color: var(--white); border-color: var(--blue-500); }
+        .footer { background: var(--navy-900); padding: 24px 40px; text-align: center; color: rgba(255,255,255,0.4); font-size: 13px; margin-top: 40px; }
+        .footer a { color: var(--teal-400); text-decoration: none; }
+        .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--gray-900); color: var(--white); padding: 12px 24px; border-radius: 25px; font-size: 14px; font-weight: 500; z-index: 1000; opacity: 0; transition: all 0.3s; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        @media (max-width: 768px) {
+            .header { padding: 0 20px; } .hero { padding: 36px 20px; } .hero h1 { font-size: 28px; }
+            .container { padding: 20px; } .token-code { font-size: 28px; letter-spacing: 4px; }
+            .token-display { padding: 16px 20px; flex-direction: column; align-items: flex-start; }
+            .input-row { flex-direction: column; } .account-card { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+<header class="header">
+    <div class="header-logo"><div class="header-logo-icon">🔐</div><span>2FA Auth</span></div>
+    <nav class="header-nav">
+        <a href="#generator">Generator</a>
+        <a href="#accounts">Accounts</a>
+    </nav>
+</header>
+<section class="hero">
+    <div class="hero-inner">
+        <h1>Secure <span>Two-Factor</span><br>Authentication</h1>
+        <p>Enterprise-grade TOTP token generator. Supports SHA1/SHA256/SHA512 with customizable time periods. Your keys stay local — never leave your device.</p>
+        <div class="hero-stats">
+            <div class="hero-stat"><span class="hero-stat-num" id="stat-total">0</span><span class="hero-stat-label">Accounts stored</span></div>
+            <div class="hero-stat"><span class="hero-stat-num" id="stat-copied">0</span><span class="hero-stat-label">Copies today</span></div>
+            <div class="hero-stat"><span class="hero-stat-num" id="stat-time">--:--</span><span class="hero-stat-label">Current time</span></div>
+        </div>
+    </div>
+</section>
+<main class="container">
+    <div class="card" id="generator">
+        <div class="card-header"><h2 class="card-title">Token Generator</h2><span class="card-badge">TOTP</span></div>
+        <div class="token-display">
+            <div>
+                <div class="token-label">Current Token</div>
+                <div class="token-code" id="live-token"><span>-</span><span>-</span><span>-</span> <span>-</span><span>-</span><span>-</span></div>
+            </div>
+            <div>
+                <div class="token-countdown"><div class="token-countdown-circle"><span class="token-countdown-num" id="live-countdown">30</span></div><span class="token-countdown-label">seconds</span></div>
+            </div>
+            <div class="token-actions"><button class="btn btn-primary btn-sm" onclick="copyLiveToken()">Copy Code</button></div>
+        </div>
+        <div class="input-row">
+            <div class="input-group" style="flex:2"><label>Secret Key (Base32)</label><input type="text" id="secretInput" placeholder="JBSWY3DPEHPK3PXP..." autocomplete="off"></div>
+            <div class="input-group"><label>Account Name</label><input type="text" id="nameInput" placeholder="e.g. Google, GitHub..." autocomplete="off"></div>
+        </div>
+        <div style="margin-bottom:12px;">
+            <label style="font-size:12px;font-weight:600;color:var(--gray-600);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px;">Digits</label>
+            <div class="options-grid" id="digits-options">
+                <span class="option-chip active" data-value="6">6 digits</span>
+                <span class="option-chip" data-value="8">8 digits</span>
+            </div>
+        </div>
+        <div style="margin-bottom:12px;">
+            <label style="font-size:12px;font-weight:600;color:var(--gray-600);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px;">Period</label>
+            <div class="options-grid" id="period-options">
+                <span class="option-chip" data-value="15">15s</span>
+                <span class="option-chip active" data-value="30">30s</span>
+                <span class="option-chip" data-value="60">60s</span>
+            </div>
+        </div>
+        <div style="margin-bottom:16px;">
+            <label style="font-size:12px;font-weight:600;color:var(--gray-600);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px;">Algorithm</label>
+            <div class="options-grid" id="algorithm-options">
+                <span class="option-chip active" data-value="SHA1">SHA1</span>
+                <span class="option-chip" data-value="SHA256">SHA256</span>
+                <span class="option-chip" data-value="SHA512">SHA512</span>
+            </div>
+        </div>
+        <div class="input-group" style="margin-bottom:16px;max-width:240px;">
+            <label>Category</label>
+            <select id="categorySelect">
+                <option value="social">Social</option><option value="finance">Finance</option>
+                <option value="work">Work</option><option value="gaming">Gaming</option>
+                <option value="other">Other</option>
+            </select>
+        </div>
+        <button class="btn btn-teal" onclick="saveAccount()" style="width:100%;justify-content:center;padding:12px;font-size:15px;">+ Add Account</button>
+    </div>
+    <div class="card" id="accounts">
+        <div class="card-header"><h2 class="card-title">Saved Accounts</h2></div>
+        <div class="search-bar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="searchInput" placeholder="Search accounts..." autocomplete="off">
+        </div>
+        <div class="category-tabs" id="categoryTabs">
+            <span class="category-tab active" data-category="all">All</span>
+            <span class="category-tab" data-category="social">Social</span>
+            <span class="category-tab" data-category="finance">Finance</span>
+            <span class="category-tab" data-category="work">Work</span>
+            <span class="category-tab" data-category="gaming">Gaming</span>
+            <span class="category-tab" data-category="other">Other</span>
+        </div>
+        <div id="accountsList"></div>
+    </div>
+</main>
+<footer class="footer">
+    <p>All secret keys are stored locally in your browser. <a href="#" onclick="clearAll();return false;">Clear all data</a></p>
+</footer>
+<div class="toast" id="toast"></div>
+<script>
+var AK='fa_auth_accounts_v2',SK='fa_auth_stats_v2';
+function getAccounts(){try{return JSON.parse(localStorage.getItem(AK)||'[]')}catch(e){return[]}}
+function saveAccounts(a){localStorage.setItem(AK,JSON.stringify(a))}
+var ct=null,cc='all',copied=0;
+document.querySelectorAll('.option-chip').forEach(function(c){c.addEventListener('click',function(){this.parentElement.querySelectorAll('.option-chip').forEach(function(x){x.classList.remove('active')});this.classList.add('active');updateGenerator()})});
+function getSel(id){var e=document.getElementById(id).querySelector('.option-chip.active');return e?e.dataset.value:null}
+var si=document.getElementById('secretInput');si.addEventListener('input',updateGenerator);
+function updateGenerator(){var s=si.value.replace(/\s+/g,'').toUpperCase();if(!s||s.length<8){ct=null;document.getElementById('live-token').innerHTML='<span>-</span><span>-</span><span>-</span> <span>-</span><span>-</span><span>-</span>';return}
+var d=parseInt(getSel('digits-options')),p=parseInt(getSel('period-options')),a=getSel('algorithm-options');
+try{ct=new OTPAuth.TOTP({issuer:'2FA',label:'Token',algorithm:a,digits:d,period:p,secret:OTPAuth.Secret.fromBase32(s)});updateTokenDisplay()}catch(e){ct=null}}
+function updateTokenDisplay(){if(!ct)return;try{var t=ct.generate(),dt=t.length===8?'<span>'+t.slice(0,4)+'</span> <span>'+t.slice(4)+'</span>':'<span>'+t.slice(0,3)+'</span> <span>'+t.slice(3)+'</span>';document.getElementById('live-token').innerHTML=dt;
+var ep=Math.floor(Date.now()/1000),pe=ct.period,r=pe-(ep%pe);document.getElementById('live-countdown').textContent=r;
+var c=document.querySelector('.token-countdown-circle'),pct=(r/pe)*100,color=pct>30?'rgba(0,168,122,0.3)':'rgba(220,38,38,0.4)';c.style.borderColor=color}catch(e){}}
+function copyLiveToken(){if(!ct){showToast('Enter a valid secret key first');return}copyToClipboard(ct.generate(),'Token copied!');incCopied()}
+function saveAccount(){var s=si.value.replace(/\s+/g,'').toUpperCase(),n=document.getElementById('nameInput').value.trim();if(!s||s.length<8){showToast('Enter a valid secret key');return}
+var accts=getAccounts();if(accts.find(function(a){return a.secret===s})){showToast('This key is already saved');return}
+var d=parseInt(getSel('digits-options')),p=parseInt(getSel('period-options')),alg=getSel('algorithm-options'),cat=document.getElementById('categorySelect').value;
+var an=n||'Account '+(accts.length+1);accts.push({name:an,secret:s,category:cat,digits:d,period:p,algorithm:alg,createdAt:Date.now()});saveAccounts(accts);renderAccounts();updateStats();
+showToast('Account "'+an+'" saved');si.value='';document.getElementById('nameInput').value='';updateGenerator()}
+function renderAccounts(){var el=document.getElementById('accountsList'),accts=getAccounts();
+var q=document.getElementById('searchInput').value.toLowerCase().trim();
+if(q)accts=accts.filter(function(a){return a.name.toLowerCase().includes(q)});
+if(cc!=='all')accts=accts.filter(function(a){return a.category===cc});
+if(accts.length===0){el.innerHTML='<div class="empty-state"><p>'+(q?'No matching accounts found':'No accounts yet. Add one above!')+'</p></div>';return}
+el.innerHTML=accts.map(function(a,i){var init=a.name.charAt(0).toUpperCase(),cd='------',prog=30;
+try{var pe=a.period||30,totp=new OTPAuth.TOTP({issuer:'2FA',label:a.name,algorithm:a.algorithm||'SHA1',digits:a.digits||6,period:pe,secret:OTPAuth.Secret.fromBase32(a.secret)});
+var t=totp.generate();cd=t.length===8?t.slice(0,4)+' '+t.slice(4):t.slice(0,3)+' '+t.slice(3);var ep=Math.floor(Date.now()/1000);prog=pe-(ep%pe)}catch(e){}
+return'<div class="account-card"><div class="account-info"><div class="account-avatar">'+init+'</div><div class="account-details"><div class="account-name">'+escapeHtml(a.name)+'</div><div class="account-meta"><span>'+(a.algorithm||'SHA1')+'</span><span>'+(a.digits||6)+'d</span><span>'+(a.period||30)+'s</span><span>'+a.category+'</span></div></div></div><div class="account-token-area"><div class="account-code" id="code-'+i+'">'+cd+'</div><div class="account-progress"><div class="account-progress-fill" id="progress-'+i+'" style="height:'+((prog/(a.period||30))*100)+'%"></div></div><div class="account-actions"><button class="btn-icon" onclick="copyAcct('+i+')" title="Copy">📋</button><button class="btn-icon danger" onclick="delAcct('+i+')" title="Delete">🗑</button></div></div></div>'}).join('')}
+function copyAcct(i){var accts=getAccounts(),f=filterAccts(accts),a=f[i];if(!a)return;
+try{var totp=new OTPAuth.TOTP({issuer:'2FA',label:a.name,algorithm:a.algorithm||'SHA1',digits:a.digits||6,period:a.period||30,secret:OTPAuth.Secret.fromBase32(a.secret)});
+copyToClipboard(totp.generate(),'Code for "'+a.name+'" copied!');incCopied()}catch(e){showToast('Failed to generate code')}}
+function delAcct(i){var accts=getAccounts(),f=filterAccts(accts),a=f[i];if(!a)return;
+var ri=accts.findIndex(function(x){return x.secret===a.secret});if(ri===-1)return;
+if(!confirm('Delete account "'+a.name+'"?'))return;accts.splice(ri,1);saveAccounts(accts);renderAccounts();updateStats();showToast('Account "'+a.name+'" deleted')}
+function filterAccts(accts){var q=document.getElementById('searchInput').value.toLowerCase().trim(),f=accts;
+if(cc!=='all')f=f.filter(function(a){return a.category===cc});if(q)f=f.filter(function(a){return a.name.toLowerCase().includes(q)});return f}
+function updateAllCodes(){if(ct)updateTokenDisplay();var accts=getAccounts(),f=filterAccts(accts);
+f.forEach(function(a,i){var ce=document.getElementById('code-'+i),pe=document.getElementById('progress-'+i);if(!ce)return;
+try{var per=a.period||30,totp=new OTPAuth.TOTP({issuer:'2FA',label:a.name,algorithm:a.algorithm||'SHA1',digits:a.digits||6,period:per,secret:OTPAuth.Secret.fromBase32(a.secret)});
+var t=totp.generate();ce.textContent=t.length===8?t.slice(0,4)+' '+t.slice(4):t.slice(0,3)+' '+t.slice(3);
+if(pe){var ep=Math.floor(Date.now()/1000),r=per-(ep%per);pe.style.height=((r/per)*100)+'%'}}catch(e){}})}
+document.querySelectorAll('.category-tab').forEach(function(t){t.addEventListener('click',function(){document.querySelectorAll('.category-tab').forEach(function(x){x.classList.remove('active')});t.classList.add('active');cc=t.dataset.category;renderAccounts()})});
+document.getElementById('searchInput').addEventListener('input',function(){renderAccounts()});
+function updateStats(){document.getElementById('stat-total').textContent=getAccounts().length;loadCopied()}
+function loadCopied(){try{var s=JSON.parse(localStorage.getItem(SK)||'{}'),t=new Date().toDateString();copied=s.date===t?(s.count||0):0;document.getElementById('stat-copied').textContent=copied}catch(e){copied=0}}
+function incCopied(){var t=new Date().toDateString();copied++;localStorage.setItem(SK,JSON.stringify({date:t,count:copied}));document.getElementById('stat-copied').textContent=copied}
+function updateTime(){var n=new Date();document.getElementById('stat-time').textContent=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0')}
+function copyToClipboard(text,msg){if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text).then(function(){showToast(msg)})}else{var ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0;';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');showToast(msg)}catch(e){}document.body.removeChild(ta)}}
+function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._timeout);t._timeout=setTimeout(function(){t.classList.remove('show')},2500)}
+function escapeHtml(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function clearAll(){if(confirm('Delete ALL stored accounts and data? This cannot be undone.')){localStorage.clear();renderAccounts();updateStats();showToast('All data cleared')}}
+document.getElementById('secretInput').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('nameInput').focus()});
+document.getElementById('nameInput').addEventListener('keydown',function(e){if(e.key==='Enter')saveAccount()});
+setInterval(updateAllCodes,1000);setInterval(updateTime,10000);updateStats();updateTime();renderAccounts();updateGenerator();
+</script>
+</body>
+</html>
